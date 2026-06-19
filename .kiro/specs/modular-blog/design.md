@@ -1193,3 +1193,363 @@ public class DomainValidationException extends BlogDomainException {
 }
 ```
 
+
+#### Resource Not Found Exceptions
+
+Thrown when a requested resource does not exist.
+
+```java
+public class PostNotFoundException extends BlogDomainException {
+    public PostNotFoundException(String slug) {
+        super("Post not found with slug: " + slug);
+    }
+    
+    public PostNotFoundException(UUID id) {
+        super("Post not found with id: " + id);
+    }
+}
+```
+
+**HTTP Response:** 404 Not Found
+**Example:**
+```json
+{
+    "timestamp": "2024-01-15T10:30:00Z",
+    "status": 404,
+    "code": "POST_NOT_FOUND",
+    "message": "Post with slug 'my-post' was not found",
+    "_links": {
+        "posts": {"href": "/api/blog/posts"},
+        "documentation": {"href": "/api/blog/docs"}
+    }
+}
+```
+
+#### Business Rule Violations
+
+```java
+public class CategoryInUseException extends BlogDomainException {
+    public CategoryInUseException(String categoryName) {
+        super("Cannot delete category '" + categoryName + "' because it has associated posts");
+    }
+}
+
+public class DuplicateSlugException extends BlogDomainException {
+    public DuplicateSlugException(String slug) {
+        super("Post with slug '" + slug + "' already exists");
+    }
+}
+```
+
+**HTTP Response:** 409 Conflict or 422 Unprocessable Entity
+
+### Global Exception Handler
+
+```java
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+    
+    private final MessageSource messageSource;
+    
+    @ExceptionHandler(DomainValidationException.class)
+    public ResponseEntity<ErrorResponse> handleValidationException(
+        DomainValidationException ex,
+        @RequestHeader(value = "Accept-Language", required = false) Locale locale
+    ) {
+        ErrorResponse response = ErrorResponse.builder()
+            .timestamp(Instant.now())
+            .status(HttpStatus.BAD_REQUEST.value())
+            .code("VALIDATION_ERROR")
+            .message(messageSource.getMessage("error.validation", null, locale))
+            .errors(ex.getFieldErrors())
+            .build();
+        
+        return ResponseEntity.badRequest().body(response);
+    }
+    
+    @ExceptionHandler(PostNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handlePostNotFound(
+        PostNotFoundException ex,
+        @RequestHeader(value = "Accept-Language", required = false) Locale locale,
+        WebRequest request
+    ) {
+        ErrorResponse response = ErrorResponse.builder()
+            .timestamp(Instant.now())
+            .status(HttpStatus.NOT_FOUND.value())
+            .code("POST_NOT_FOUND")
+            .message(messageSource.getMessage("error.post.notFound", 
+                new Object[]{ex.getMessage()}, locale))
+            .build();
+        
+        // Add HATEOAS links
+        response.add(linkTo(methodOn(PostController.class).listPosts(0, 10))
+            .withRel("posts"));
+        
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+    }
+    
+    @ExceptionHandler(CategoryInUseException.class)
+    public ResponseEntity<ErrorResponse> handleCategoryInUse(
+        CategoryInUseException ex,
+        @RequestHeader(value = "Accept-Language", required = false) Locale locale
+    ) {
+        ErrorResponse response = ErrorResponse.builder()
+            .timestamp(Instant.now())
+            .status(HttpStatus.CONFLICT.value())
+            .code("CATEGORY_IN_USE")
+            .message(messageSource.getMessage("error.category.inUse", 
+                new Object[]{ex.getMessage()}, locale))
+            .build();
+        
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
+    
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> handleGenericException(
+        Exception ex,
+        @RequestHeader(value = "Accept-Language", required = false) Locale locale
+    ) {
+        log.error("Unexpected error occurred", ex);
+        
+        ErrorResponse response = ErrorResponse.builder()
+            .timestamp(Instant.now())
+            .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
+            .code("INTERNAL_ERROR")
+            .message(messageSource.getMessage("error.internal", null, locale))
+            .build();
+        
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+    }
+}
+```
+
+
+### Internationalization Strategy
+
+#### Message Properties Structure
+
+```
+src/main/resources/i18n/
+├── messages_en_US.properties
+├── messages_pt_BR.properties
+└── messages_es_ES.properties
+```
+
+#### Message Keys Convention
+
+```properties
+# Validation messages (en-US)
+validation.title.required=Title is required
+validation.title.size=Title must be between {0} and {1} characters. Provided: {2}. Example: "My First Blog Post"
+validation.content.required=Content is required
+validation.category.required=Category is required
+validation.authorName.required=Author name is required
+validation.authorEmail.required=Email is required
+validation.authorEmail.format=Email format is invalid. Provided: {0}. Expected format: user@example.com
+
+# Error messages (en-US)
+error.validation=Validation failed for one or more fields
+error.post.notFound=Post not found: {0}
+error.category.notFound=Category not found: {0}
+error.category.inUse=Cannot delete category because it has {0} associated post(s)
+error.category.duplicate=Category with name "{0}" already exists
+error.slug.duplicate=A post with slug "{0}" already exists
+error.internal=An unexpected error occurred. Please try again later
+error.post.notPublished=Post is not published and cannot be accessed
+
+# Business messages (en-US)
+business.post.published=Post published successfully
+business.post.created=Post created successfully
+business.comment.pending=Comment submitted and pending approval
+```
+
+#### Portuguese (pt-BR) Examples
+
+```properties
+validation.title.required=Título é obrigatório
+validation.title.size=Título deve ter entre {0} e {1} caracteres. Fornecido: {2}. Exemplo: "Meu Primeiro Post no Blog"
+validation.content.required=Conteúdo é obrigatório
+validation.category.required=Categoria é obrigatória
+error.post.notFound=Post não encontrado: {0}
+error.category.inUse=Não é possível excluir a categoria porque ela possui {0} post(s) associado(s)
+```
+
+#### Spanish (es-ES) Examples
+
+```properties
+validation.title.required=El título es obligatorio
+validation.title.size=El título debe tener entre {0} y {1} caracteres. Proporcionado: {2}. Ejemplo: "Mi Primera Entrada de Blog"
+validation.content.required=El contenido es obligatorio
+validation.category.required=La categoría es obligatoria
+error.post.notFound=Entrada no encontrada: {0}
+error.category.inUse=No se puede eliminar la categoría porque tiene {0} entrada(s) asociada(s)
+```
+
+
+### HATEOAS Implementation
+
+#### Model Assembler Pattern
+
+```java
+@Component
+public class PostModelAssembler implements RepresentationModelAssembler<Post, EntityModel<PostDTO>> {
+    
+    @Override
+    public EntityModel<PostDTO> toModel(Post post) {
+        PostDTO dto = toDTO(post);
+        EntityModel<PostDTO> model = EntityModel.of(dto);
+        
+        // Self link
+        model.add(linkTo(methodOn(PostController.class).getPost(post.getSlug()))
+            .withSelfRel());
+        
+        // Edit link (if applicable)
+        if (post.getStatus() == PostStatus.DRAFT || post.getStatus() == PostStatus.PUBLISHED) {
+            model.add(linkTo(methodOn(PostController.class).updatePost(post.getId(), null))
+                .withRel("edit"));
+        }
+        
+        // Delete link
+        model.add(linkTo(methodOn(PostController.class).deletePost(post.getId()))
+            .withRel("delete"));
+        
+        // Publish/unpublish links (state-dependent)
+        if (post.getStatus() == PostStatus.DRAFT) {
+            model.add(linkTo(methodOn(PostController.class).publishPost(post.getId()))
+                .withRel("publish"));
+        }
+        
+        // Category link
+        model.add(linkTo(methodOn(CategoryController.class).getCategory(post.getCategory().getId()))
+            .withRel("category"));
+        
+        // Comments link
+        model.add(linkTo(methodOn(PostController.class).getComments(post.getSlug()))
+            .withRel("comments"));
+        
+        return model;
+    }
+    
+    public PagedModel<EntityModel<PostDTO>> toPagedModel(
+        List<Post> posts,
+        Pagination pagination,
+        long totalElements
+    ) {
+        List<EntityModel<PostDTO>> models = posts.stream()
+            .map(this::toModel)
+            .toList();
+        
+        PagedModel.PageMetadata metadata = new PagedModel.PageMetadata(
+            pagination.size(),
+            pagination.page(),
+            totalElements
+        );
+        
+        PagedModel<EntityModel<PostDTO>> pagedModel = PagedModel.of(models, metadata);
+        
+        // Self link
+        pagedModel.add(linkTo(methodOn(PostController.class)
+            .listPosts(pagination.page(), pagination.size()))
+            .withSelfRel());
+        
+        // First page link
+        pagedModel.add(linkTo(methodOn(PostController.class)
+            .listPosts(0, pagination.size()))
+            .withRel(IanaLinkRelations.FIRST));
+        
+        // Last page link
+        long totalPages = (totalElements + pagination.size() - 1) / pagination.size();
+        pagedModel.add(linkTo(methodOn(PostController.class)
+            .listPosts((int) totalPages - 1, pagination.size()))
+            .withRel(IanaLinkRelations.LAST));
+        
+        // Next page link (if applicable)
+        if (pagination.page() < totalPages - 1) {
+            pagedModel.add(linkTo(methodOn(PostController.class)
+                .listPosts(pagination.page() + 1, pagination.size()))
+                .withRel(IanaLinkRelations.NEXT));
+        }
+        
+        // Previous page link (if applicable)
+        if (pagination.page() > 0) {
+            pagedModel.add(linkTo(methodOn(PostController.class)
+                .listPosts(pagination.page() - 1, pagination.size()))
+                .withRel(IanaLinkRelations.PREV));
+        }
+        
+        return pagedModel;
+    }
+}
+```
+
+
+#### HAL Response Examples
+
+**Single Post Response:**
+
+```json
+{
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "title": "My First Blog Post",
+    "slug": "my-first-blog-post",
+    "content": "This is the content of my first post...",
+    "status": "PUBLISHED",
+    "category": {
+        "id": "987e6543-e21b-34d5-a678-426614174001",
+        "name": "Technology",
+        "description": "Tech articles"
+    },
+    "tags": ["java", "spring-boot", "rest-api"],
+    "publishedAt": "2024-01-15T10:30:00Z",
+    "_links": {
+        "self": {
+            "href": "http://localhost:8080/api/blog/posts/my-first-blog-post"
+        },
+        "edit": {
+            "href": "http://localhost:8080/api/blog/posts/123e4567-e89b-12d3-a456-426614174000"
+        },
+        "delete": {
+            "href": "http://localhost:8080/api/blog/posts/123e4567-e89b-12d3-a456-426614174000"
+        },
+        "category": {
+            "href": "http://localhost:8080/api/blog/categories/987e6543-e21b-34d5-a678-426614174001"
+        },
+        "comments": {
+            "href": "http://localhost:8080/api/blog/posts/my-first-blog-post/comments"
+        }
+    }
+}
+```
+
+**Paginated Posts Response:**
+
+```json
+{
+    "_embedded": {
+        "posts": [
+            {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "title": "My First Blog Post",
+                "slug": "my-first-blog-post",
+                "status": "PUBLISHED",
+                "_links": {
+                    "self": {"href": "/api/blog/posts/my-first-blog-post"}
+                }
+            }
+        ]
+    },
+    "_links": {
+        "self": {"href": "/api/blog/posts?page=0&size=10"},
+        "first": {"href": "/api/blog/posts?page=0&size=10"},
+        "last": {"href": "/api/blog/posts?page=4&size=10"},
+        "next": {"href": "/api/blog/posts?page=1&size=10"}
+    },
+    "page": {
+        "size": 10,
+        "totalElements": 47,
+        "totalPages": 5,
+        "number": 0
+    }
+}
+```
+
