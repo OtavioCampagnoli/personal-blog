@@ -10,6 +10,7 @@ Este documento especifica os requisitos do sistema **Personal Blog**, implementa
 
 - **Sistema**: A aplicação Personal Blog como um todo (monolito modular).
 - **Módulo**: Unidade de negócio coesa e isolada dentro do monolito (ex.: `blog`, `auth`, `analytics`).
+- **Shared_Module**: Módulo especial (`com.blog.shared`) contendo código compartilhado por todos os módulos (ex.: `BaseEntity`, `Id<T>`, utilitários comuns), sendo a única dependência permitida para todos os módulos de negócio; o Shared_Module nunca depende de módulos de negócio, apenas de bibliotecas externas quando necessário.
 - **Blog_Module**: O módulo responsável pelo domínio de blog (posts, categorias, tags, comentários).
 - **Post**: Artigo publicado no blog, com título, conteúdo, slug, status e metadados.
 - **Slug**: Identificador textual único e amigável para URL de um post (ex.: `meu-primeiro-post`).
@@ -28,6 +29,10 @@ Este documento especifica os requisitos do sistema **Personal Blog**, implementa
 - **Domain_Service_Interface**: Interface Java que define o contrato de um serviço de domínio, permitindo substituição por mocks em testes unitários sem necessidade de contexto Spring.
 - **Validator**: Interface de abstração para validação de entidades de domínio, permitindo trocar a implementação (Jakarta Bean Validation, validação customizada) sem alterar o código de domínio.
 - **Notification**: Objeto acumulador de erros de validação que segue o Notification Pattern (Martin Fowler), permitindo coletar todos os erros de validação de uma entidade antes de lançar uma exceção, resultando em melhor experiência do usuário ao apresentar todos os problemas de uma vez.
+- **BaseEntity**: Classe abstrata genérica base para todas as entidades de domínio, localizada no Shared_Module (`com.blog.shared.domain`), contendo identificador tipado `Id<T>` e campos de auditoria (`createdAt`, `updatedAt`, `deletedAt`), gerenciando automaticamente o ciclo de vida da entidade e fornecendo comportamento comum de soft delete; todas as entidades de domínio de qualquer módulo devem herdar de `BaseEntity<Self>` (ex.: `Post extends BaseEntity<Post>`).
+- **Id<T>**: Classe genérica imutável localizada no Shared_Module (`com.blog.shared.domain`) que encapsula UUID como identificador tipado, fornecendo type-safety para prevenir erros de atribuição de IDs entre entidades diferentes (ex.: `Id<Post>` não pode ser confundido com `Id<Category>` em tempo de compilação); contém factory methods `Id.generate()` para criar novos IDs e `Id.of(UUID uuid)` para reconstituir IDs da persistência, com `equals()` e `hashCode()` baseados no UUID interno.
+- **Audit_Fields**: Conjunto de campos automáticos de auditoria presentes em toda `BaseEntity`: `createdAt` (timestamp de criação, imutável, definido automaticamente no construtor), `updatedAt` (timestamp de última modificação, atualizado automaticamente), `deletedAt` (timestamp de exclusão lógica para soft delete, inicialmente null); esses campos permitem rastreabilidade completa do ciclo de vida de qualquer entidade sem necessidade de código adicional nos módulos.
+- **Audit_Trail**: Conjunto de timestamps automáticos (`createdAt`, `updatedAt`, `deletedAt`) mantidos pelo sistema para rastrear o ciclo de vida de cada entidade, permitindo auditoria e implementação de soft deletes; implementado automaticamente pela classe `BaseEntity` do Shared_Module.
 - **H2_Database**: Banco de dados SQL em memória compatível com PostgreSQL, utilizado em testes de repositório para validar queries SQL reais com JdbcTemplate sem necessidade de banco externo.
 - **Table_Prefix**: Convenção de nomenclatura de tabelas no schema `public` do PostgreSQL que identifica o módulo proprietário por meio de um prefixo no nome da tabela (ex.: `blog_posts`, `blog_categories`, `blog_comments`, `blog_tags`).
 - **Slug_Generator**: Componente responsável por gerar slugs a partir de títulos de posts.
@@ -50,17 +55,51 @@ Este documento especifica os requisitos do sistema **Personal Blog**, implementa
 
 #### Acceptance Criteria
 
-1. THE Sistema SHALL organizar o código-fonte em pacotes raiz separados por módulo, seguindo a convenção `com.blog.<modulo>`, onde `<modulo>` é um identificador em letras minúsculas sem separadores (ex.: `com.blog.blog`, `com.blog.auth`).
-2. THE Sistema SHALL utilizar um único banco de dados PostgreSQL compartilhado por todos os módulos, isolando as tabelas de cada módulo no schema `public` utilizando o `Table_Prefix` no formato `<modulo>_` (ex.: prefixo `blog_` para o módulo blog: `blog_posts`, `blog_categories`), sem utilizar schemas PostgreSQL separados ou múltiplas instâncias de banco de dados.
-3. WHEN um módulo precisa de dados de outro módulo de forma síncrona, THE Sistema SHALL acessar esses dados exclusivamente por meio da `Module_Facade` do módulo proprietário; acesso direto a `Repository_Interface`s, entidades de domínio ou tabelas de outros módulos é estritamente proibido.
-4. WHEN um módulo precisa notificar outro módulo de forma assíncrona, THE Sistema SHALL publicar `Internal_Event`s via `ApplicationEventPublisher` do Spring; o módulo consumidor é proibido de realizar chamadas diretas a qualquer tipo dentro dos pacotes internos de `com.blog.<modulo_produtor>`.
-5. IF um módulo tenta acessar o `Repository_Interface` ou serviços internos de outro módulo, THEN THE Sistema SHALL falhar durante a execução dos testes ArchUnit, impedindo o acoplamento direto.
-6. THE Sistema SHALL ser empacotado como um único artefato JAR executável, sem necessidade de orquestração de múltiplos processos para o ambiente de produção.
-7. WHERE um novo módulo for adicionado ao Sistema, THE Sistema SHALL acomodar o novo módulo sem alterações no código dos módulos existentes, exceto em arquivos de bootstrapping — definidos como arquivos cuja única responsabilidade é registrar ou compor módulos na inicialização da aplicação.
+1. THE Sistema SHALL organizar o código-fonte em pacotes raiz separados por módulo, seguindo a convenção `com.blog.<modulo>`, onde `<modulo>` é um identificador em letras minúsculas sem separadores (ex.: `com.blog.blog`, `com.blog.auth`, `com.blog.shared`).
+2. THE Sistema SHALL manter um Shared_Module no pacote `com.blog.shared` contendo código compartilhado entre todos os módulos (ex.: `BaseEntity`, `Id<T>`, classes utilitárias comuns), sendo a única dependência transversal permitida para módulos de negócio.
+3. THE Sistema SHALL garantir que o Shared_Module nunca dependa de nenhum módulo de negócio (ex.: `blog`, `auth`), apenas de bibliotecas externas quando necessário, mantendo o grafo de dependências acíclico e unidirecional (módulos de negócio → Shared_Module → bibliotecas externas).
+4. THE Sistema SHALL utilizar um único banco de dados PostgreSQL compartilhado por todos os módulos, isolando as tabelas de cada módulo no schema `public` utilizando o `Table_Prefix` no formato `<modulo>_` (ex.: prefixo `blog_` para o módulo blog: `blog_posts`, `blog_categories`), sem utilizar schemas PostgreSQL separados ou múltiplas instâncias de banco de dados.
+5. WHEN um módulo precisa de dados de outro módulo de forma síncrona, THE Sistema SHALL acessar esses dados exclusivamente por meio da `Module_Facade` do módulo proprietário; acesso direto a `Repository_Interface`s, entidades de domínio ou tabelas de outros módulos é estritamente proibido.
+6. WHEN um módulo precisa notificar outro módulo de forma assíncrona, THE Sistema SHALL publicar `Internal_Event`s via `ApplicationEventPublisher` do Spring; o módulo consumidor é proibido de realizar chamadas diretas a qualquer tipo dentro dos pacotes internos de `com.blog.<modulo_produtor>`.
+7. IF um módulo tenta acessar o `Repository_Interface` ou serviços internos de outro módulo, THEN THE Sistema SHALL falhar durante a execução dos testes ArchUnit, impedindo o acoplamento direto.
+8. THE Sistema SHALL ser empacotado como um único artefato JAR executável, sem necessidade de orquestração de múltiplos processos para o ambiente de produção.
+9. WHERE um novo módulo for adicionado ao Sistema, THE Sistema SHALL acomodar o novo módulo sem alterações no código dos módulos existentes, exceto em arquivos de bootstrapping — definidos como arquivos cuja única responsabilidade é registrar ou compor módulos na inicialização da aplicação.
 
 ---
 
-### Requirement 2: Gerenciamento de Posts
+### Requirement 2: Módulo Shared e BaseEntity
+
+**User Story:** Como desenvolvedor de qualquer módulo, quero utilizar componentes compartilhados de infraestrutura de domínio fornecidos pelo Shared_Module, para que eu não precise reimplementar funcionalidades comuns como identificadores tipados e auditoria de entidades em cada módulo.
+
+#### Acceptance Criteria
+
+1. THE Shared_Module SHALL residir no pacote `com.blog.shared` e conter código compartilhado entre todos os módulos, incluindo classes de domínio base, utilitários comuns e abstrações de infraestrutura que não pertencem a nenhum módulo de negócio específico.
+2. THE Shared_Module SHALL definir a classe abstrata genérica `BaseEntity<T>` no pacote `com.blog.shared.domain`, onde o parâmetro de tipo `T` representa o tipo concreto da entidade (ex.: `Post extends BaseEntity<Post>`).
+3. THE BaseEntity<T> SHALL conter os seguintes campos protegidos: `Id<T> id`, `Instant createdAt`, `Instant updatedAt`, `Instant deletedAt`, fornecendo identificador tipado e campos de auditoria automaticamente para todas as entidades que a herdam.
+4. THE BaseEntity<T> SHALL fornecer um construtor protegido que aceita `Id<T> id` como parâmetro e inicializa automaticamente `createdAt` com `Instant.now()`, `updatedAt` com `Instant.now()`, e `deletedAt` com `null`, garantindo que toda entidade criada possua timestamps de auditoria corretos desde o momento da construção.
+5. THE BaseEntity<T> SHALL definir o campo `createdAt` como imutável após inicialização, sem fornecer método público para modificá-lo, garantindo que o timestamp de criação nunca seja alterado após a construção da entidade.
+6. THE BaseEntity<T> SHALL fornecer um método protegido `markAsUpdated()` que define `updatedAt` com `Instant.now()`, permitindo que subclasses atualizem o timestamp de modificação sempre que a entidade for alterada.
+7. THE BaseEntity<T> SHALL fornecer um método público `softDelete()` que define `deletedAt` com `Instant.now()`, implementando exclusão lógica sem remover o registro do banco de dados.
+8. THE BaseEntity<T> SHALL fornecer um método público `isDeleted()` que retorna `true` se `deletedAt` não for `null`, permitindo verificação simples do estado de exclusão da entidade.
+9. THE BaseEntity<T> SHALL fornecer métodos getter públicos para todos os campos de auditoria: `getId()`, `getCreatedAt()`, `getUpdatedAt()`, `getDeletedAt()`, permitindo acesso aos metadados de auditoria sem expor os campos diretamente.
+10. THE BaseEntity<T> SHALL implementar `equals()` e `hashCode()` baseados exclusivamente no campo `id`, garantindo que duas instâncias de entidade com o mesmo ID sejam consideradas iguais independentemente dos demais campos.
+11. THE Shared_Module SHALL definir a classe genérica imutável `Id<T>` no pacote `com.blog.shared.domain`, encapsulando um UUID privado final e fornecendo type-safety para identificadores de entidades.
+12. THE Id<T> SHALL fornecer um factory method estático `Id.generate()` que cria um novo identificador tipado com um UUID aleatório gerado por `UUID.randomUUID()`.
+13. THE Id<T> SHALL fornecer um factory method estático `Id.of(UUID uuid)` que cria um identificador tipado a partir de um UUID existente, utilizado para reconstituir entidades da persistência.
+14. THE Id<T> SHALL fornecer um método público `value()` que retorna o UUID encapsulado, permitindo acesso ao valor bruto quando necessário para persistência ou serialização.
+15. THE Id<T> SHALL implementar `equals()` e `hashCode()` baseados no UUID interno, garantindo que dois `Id<T>` com o mesmo UUID sejam considerados iguais.
+16. THE Id<T> SHALL implementar `toString()` retornando a representação string do UUID, facilitando logging e debugging.
+17. THE Id<T> SHALL ser uma classe final para prevenir herança e garantir imutabilidade completa da abstração de identificador.
+18. WHEN um desenvolvedor define uma nova entidade de domínio em qualquer módulo, THE Sistema SHALL exigir que a entidade herde de `BaseEntity<Self>` (ex.: `public class Post extends BaseEntity<Post>`), recebendo automaticamente identificador tipado e campos de auditoria sem código adicional.
+19. WHEN uma entidade que herda de `BaseEntity<T>` é modificada, THE entidade SHALL invocar `markAsUpdated()` internamente em seus métodos de modificação, garantindo que `updatedAt` seja atualizado automaticamente sempre que a entidade mudar de estado.
+20. THE Shared_Module SHALL garantir que `BaseEntity<T>` e `Id<T>` não possuam dependências de frameworks de persistência (JDBC, JPA, Spring Data), mantendo-se como classes de domínio puro compatíveis com qualquer mecanismo de persistência escolhido pelos módulos.
+21. THE Shared_Module SHALL ser a única dependência transversal permitida para módulos de negócio; módulos como `blog`, `auth` ou `analytics` podem depender do Shared_Module, mas nunca de outros módulos de negócio.
+22. IF o Shared_Module tentar importar classes de qualquer módulo de negócio (ex.: `com.blog.blog.*`, `com.blog.auth.*`), THEN THE Sistema SHALL falhar durante a execução dos testes ArchUnit, impedindo dependência reversa e mantendo o grafo de dependências acíclico.
+23. THE Shared_Module SHALL garantir que todos os tipos exportados sejam estáveis e de uso geral, evitando incluir lógica de negócio específica de qualquer módulo; apenas abstrações, utilitários e componentes verdadeiramente compartilhados devem residir no Shared_Module.
+
+---
+
+### Requirement 3: Gerenciamento de Posts
 
 **User Story:** Como Author, quero criar, editar, publicar e remover posts, para que eu possa gerenciar o conteúdo do meu blog de forma completa.
 
@@ -77,7 +116,7 @@ Este documento especifica os requisitos do sistema **Personal Blog**, implementa
 
 ---
 
-### Requirement 3: Listagem e Leitura de Posts
+### Requirement 4: Listagem e Leitura de Posts
 
 **User Story:** Como Reader, quero listar e ler posts publicados, para que eu possa consumir o conteúdo do blog de forma organizada e eficiente.
 
@@ -94,7 +133,7 @@ Este documento especifica os requisitos do sistema **Personal Blog**, implementa
 
 ---
 
-### Requirement 4: Gerenciamento de Categorias e Tags
+### Requirement 5: Gerenciamento de Categorias e Tags
 
 **User Story:** Como Author, quero gerenciar categorias e tags, para que eu possa organizar o conteúdo do blog de forma taxonômica e consistente.
 
@@ -109,7 +148,7 @@ Este documento especifica os requisitos do sistema **Personal Blog**, implementa
 
 ---
 
-### Requirement 5: Gerenciamento de Comentários
+### Requirement 6: Gerenciamento de Comentários
 
 **User Story:** Como Reader, quero comentar em posts publicados, para que eu possa interagir com o conteúdo e com o Author do blog.
 
@@ -124,7 +163,7 @@ Este documento especifica os requisitos do sistema **Personal Blog**, implementa
 
 ---
 
-### Requirement 6: Regras Arquiteturais do Módulo
+### Requirement 7: Regras Arquiteturais do Módulo
 
 **User Story:** Como desenvolvedor, quero que o módulo de Blog siga regras arquiteturais claras, para que o código permaneça manutenível, testável e preparado para extensão com novos módulos.
 
@@ -141,13 +180,23 @@ Este documento especifica os requisitos do sistema **Personal Blog**, implementa
 9. WHEN o objeto `Notification` contém erros após validação completa, THE Blog_Module SHALL lançar `DomainValidationException` contendo um mapa de todos os campos inválidos com suas respectivas mensagens de erro, impedindo que a entidade exista em estado inválido.
 10. THE Blog_Module SHALL definir a classe `Notification` no pacote `domain.validation` com métodos para adicionar erros por campo (`addError(field, message)`), verificar existência de erros (`hasErrors()`), e obter todos os erros acumulados (`getErrors()`, `getAllErrors()`).
 11. THE Blog_Module SHALL utilizar `Notification` para validações simples de campo (obrigatoriedade, tamanho, formato) e para validações complexas de regras de negócio que envolvem múltiplos campos ou estado da entidade.
-10. THE Blog_Module SHALL implementar testes unitários de lógica de domínio utilizando Mockito para mockar `Repository_Interface`s, testes de repositório com `H2_Database` em memória utilizando JdbcTemplate, e testes de integração end-to-end com TestContainers executando PostgreSQL real, com cobertura mínima de 80% das linhas do módulo.
-11. IF uma dependência externa (biblioteca de terceiros) for necessária exclusivamente por um módulo, THEN THE Sistema SHALL declarar essa dependência de forma que ela seja claramente associada ao módulo, utilizando comentários ou separação em sub-módulo de build quando aplicável.
-12. THE Blog_Module SHALL utilizar o mecanismo de migração de banco de dados Flyway, com scripts de migração localizados em `db/migration/blog/`, versionados separadamente dos demais módulos.
+12. THE Blog_Module SHALL garantir que todas as entidades de domínio (`Post`, `Category`, `Comment`, `Tag`) herdem de `BaseEntity<Self>` fornecida pelo Shared_Module (ex.: `Post extends BaseEntity<Post>`), recebendo automaticamente identificador tipado `Id<T>` e campos de auditoria (`createdAt`, `updatedAt`, `deletedAt`) sem necessidade de reimplementação.
+13. THE Blog_Module SHALL utilizar a classe genérica `Id<T>` fornecida pelo Shared_Module em todos os identificadores de entidades (ex.: `Id<Post>`, `Id<Category>`, `Id<Comment>`), aproveitando o type-safety fornecido pela tipagem genérica para prevenir erros de atribuição entre IDs de diferentes tipos de entidades.
+14. THE Blog_Module SHALL garantir que `Repository_Interface`s utilizem `Id<T>` tipado nos parâmetros e retornos de métodos (ex.: `Optional<Post> findById(Id<Post> id)`), ao invés de UUID direto, permitindo que o compilador detecte erros de tipo ao passar IDs incorretos entre métodos.
+15. WHEN uma entidade de domínio do Blog_Module precisa de um novo identificador, THE Blog_Module SHALL utilizar o factory method `Id.generate()` fornecido pelo Shared_Module, garantindo consistência na geração de IDs em todo o sistema.
+16. WHEN o Blog_Module reconstitui uma entidade da persistência, THE Blog_Module SHALL utilizar o factory method `Id.of(UUID uuid)` fornecido pelo Shared_Module para converter o UUID do banco de dados de volta em `Id<T>` tipado.
+17. WHEN uma entidade de domínio do Blog_Module é modificada, THE entidade SHALL invocar o método protegido `markAsUpdated()` herdado de `BaseEntity<T>`, garantindo que o campo `updatedAt` seja atualizado automaticamente para refletir o timestamp da última alteração.
+18. WHEN uma entidade de domínio do Blog_Module é deletada, THE Blog_Module SHALL invocar o método público `softDelete()` herdado de `BaseEntity<T>`, implementando exclusão lógica ao definir o campo `deletedAt` com o timestamp atual sem remover o registro fisicamente do banco de dados.
+19. WHEN repositórios executam consultas padrão de leitura, THE Blog_Module SHALL filtrar automaticamente entidades onde `deletedAt IS NOT NULL` utilizando o método `isDeleted()` herdado de `BaseEntity<T>`, retornando apenas entidades ativas por padrão.
+20. WHERE operações especiais requerem acesso a entidades deletadas, THE Blog_Module SHALL fornecer métodos explícitos nos repositórios (ex.: `findByIdIncludingDeleted(Id<Post> id)`) para permitir recuperação de entidades marcadas como deletadas.
+21. THE Blog_Module SHALL garantir que ao herdar de `BaseEntity<T>`, as entidades de domínio não precisem reimplementar `equals()` e `hashCode()`, pois a implementação baseada em `id` herdada de `BaseEntity<T>` é suficiente e consistente para todas as entidades.
+22. THE Blog_Module SHALL implementar testes unitários de lógica de domínio utilizando Mockito para mockar `Repository_Interface`s, testes de repositório com `H2_Database` em memória utilizando JdbcTemplate, e testes de integração end-to-end com TestContainers executando PostgreSQL real, com cobertura mínima de 80% das linhas do módulo.
+24. IF uma dependência externa (biblioteca de terceiros) for necessária exclusivamente por um módulo, THEN THE Sistema SHALL declarar essa dependência de forma que ela seja claramente associada ao módulo, utilizando comentários ou separação em sub-módulo de build quando aplicável.
+25. THE Blog_Module SHALL utilizar o mecanismo de migração de banco de dados Flyway, com scripts de migração localizados em `db/migration/blog/`, versionados separadamente dos demais módulos.
 
 ---
 
-### Requirement 7: API REST do Módulo de Blog
+### Requirement 8: API REST do Módulo de Blog
 
 **User Story:** Como desenvolvedor frontend ou consumidor de API, quero que o módulo de Blog exponha uma API REST bem definida com suporte a internacionalização e hipermídia, para que eu possa integrar o conteúdo do blog em qualquer interface de forma previsível, navegar pela API sem conhecimento prévio de URIs e receber mensagens no idioma apropriado.
 
@@ -166,7 +215,7 @@ Este documento especifica os requisitos do sistema **Personal Blog**, implementa
 
 ---
 
-### Requirement 8: Persistência e Integridade dos Dados
+### Requirement 9: Persistência e Integridade dos Dados
 
 **User Story:** Como operador do sistema, quero que os dados do blog sejam persistidos de forma confiável e íntegra no PostgreSQL, para que não haja perda ou corrupção de conteúdo.
 
@@ -179,10 +228,16 @@ Este documento especifica os requisitos do sistema **Personal Blog**, implementa
 5. THE Blog_Module SHALL nomear scripts de migração Flyway seguindo o padrão `V<versão>__<descrição>.sql` para migrações versionadas e `R__<descrição>.sql` para migrações repetíveis (views, procedures, funções).
 6. WHEN scripts versionados (`V*`) criam tabelas, colunas ou constraints, THE Blog_Module SHALL utilizar `IF NOT EXISTS` na cláusula SQL para evitar erros em caso de reaplicação.
 7. WHEN scripts versionados (`V*`) removem tabelas, colunas ou constraints, THE Blog_Module SHALL utilizar `IF EXISTS` na cláusula SQL para evitar erros em caso de reaplicação.
-8. THE Blog_Module SHALL utilizar UUIDs como identificadores primários das entidades `Post`, `Category`, `Comment`, gerados pela aplicação antes da persistência.
-9. IF uma operação de escrita falhar por violação de constraint do banco de dados, THEN THE Blog_Module SHALL capturar a exceção SQLException, realizar rollback da transação e retornar uma mensagem de erro amigável ao chamador, sem propagar detalhes internos do driver JDBC para a camada de API.
-10. IF uma entidade de domínio falhar na validação durante a criação ou atualização, THEN THE Blog_Module SHALL lançar `DomainValidationException` antes de qualquer tentativa de persistência, contendo mensagens descritivas dos campos inválidos.
-11. THE Blog_Module SHALL indexar as colunas `slug` da tabela `blog_posts`, `name` da tabela `blog_categories` e `published_at` da tabela `blog_posts` para garantir performance nas consultas mais frequentes.
+8. THE Blog_Module SHALL garantir que todas as tabelas de entidades de domínio contenham as seguintes colunas obrigatórias do `Audit_Trail`: `id UUID PRIMARY KEY`, `created_at TIMESTAMP NOT NULL`, `updated_at TIMESTAMP NOT NULL`, `deleted_at TIMESTAMP`.
+9. THE Blog_Module SHALL definir a coluna `created_at` com valor default `CURRENT_TIMESTAMP` no schema do banco de dados, garantindo que o timestamp seja automaticamente definido no momento da inserção.
+10. THE Blog_Module SHALL atualizar a coluna `updated_at` automaticamente sempre que um registro for modificado, seja via trigger de banco de dados ou lógica de aplicação na camada de repositório.
+11. THE Blog_Module SHALL utilizar a coluna `deleted_at` para implementar soft delete, definindo o valor com o timestamp de exclusão ao invés de executar comando `DELETE` físico no banco de dados.
+12. WHEN consultas padrão de leitura são executadas pelos repositórios, THE Blog_Module SHALL incluir automaticamente o filtro `WHERE deleted_at IS NULL` em todas as queries, exceto em métodos explicitamente projetados para recuperar entidades deletadas.
+13. THE Blog_Module SHALL utilizar identificadores do tipo `Id<T>` fornecidos pelo Shared_Module (encapsulando UUIDs) como identificadores primários das entidades `Post`, `Category`, `Comment`, gerados pela aplicação usando `Id.generate()` antes da persistência e convertidos de/para UUID nas camadas de persistência.
+14. IF uma operação de escrita falhar por violação de constraint do banco de dados, THEN THE Blog_Module SHALL capturar a exceção SQLException, realizar rollback da transação e retornar uma mensagem de erro amigável ao chamador, sem propagar detalhes internos do driver JDBC para a camada de API.
+15. IF uma entidade de domínio falhar na validação durante a criação ou atualização, THEN THE Blog_Module SHALL lançar `DomainValidationException` antes de qualquer tentativa de persistência, contendo mensagens descritivas dos campos inválidos.
+16. THE Blog_Module SHALL indexar as colunas `slug` da tabela `blog_posts`, `name` da tabela `blog_categories` e `published_at` da tabela `blog_posts` para garantir performance nas consultas mais frequentes.
+17. THE Blog_Module SHALL criar índices nas colunas `deleted_at` das tabelas de entidades para otimizar consultas que filtram registros ativos (`WHERE deleted_at IS NULL`).
 
 ---
 
@@ -234,7 +289,7 @@ Este documento especifica os requisitos do sistema **Personal Blog**, implementa
 
 ---
 
-### Requirement 9: Estratégia de Persistência com JdbcTemplate
+### Requirement 12: Estratégia de Persistência com JdbcTemplate
 
 **User Story:** Como desenvolvedor, quero que a camada de domínio seja independente do banco de dados e que a persistência utilize JdbcTemplate, para que eu possa executar diferentes tipos de testes de forma eficiente e ter controle direto sobre queries SQL sem a complexidade do ORM.
 
