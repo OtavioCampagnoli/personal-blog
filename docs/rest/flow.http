@@ -1,0 +1,62 @@
+### ─────────────────────────────────────────
+### FLOW COMPLETO: Criar post e adicionar tópicos
+### Execute os requests em ordem!
+### ─────────────────────────────────────────
+
+@baseUrl = http://localhost:8080
+@categoryId = 11111111-1111-1111-1111-111111111111
+
+### PASSO 1: Criar o post
+# @name createPost
+POST {{baseUrl}}/api/blog/posts
+Content-Type: application/json
+
+{
+  "title": "Guia Completo de Spring Boot",
+  "description": "Aprenda Spring Boot do zero ao deploy com exemplos práticos",
+  "categoryId": "{{categoryId}}",
+  "tags": ["java", "spring-boot", "tutorial"]
+}
+
+###
+
+### PASSO 2: Adicionar tópico 1 — Introdução
+POST {{baseUrl}}/api/blog/posts/guia-completo-de-spring-boot/topics
+Content-Type: application/json
+
+{
+  "title": "O que é Spring Boot",
+  "content": "## Introdução\n\nSpring Boot é um framework opinado que simplifica o desenvolvimento de aplicações Java.\n\nEle fornece:\n- Auto-configuração\n- Servidor embutido\n- Dependências gerenciadas"
+}
+
+###
+
+### PASSO 3: Adicionar tópico 2 — Setup
+POST {{baseUrl}}/api/blog/posts/guia-completo-de-spring-boot/topics
+Content-Type: application/json
+
+{
+  "title": "Configurando o Ambiente",
+  "content": "## Pré-requisitos\n\nAntes de começar, instale:\n\n- Java 21: `sudo apt install openjdk-21-jdk`\n- Maven: `sudo apt install maven`\n\n## Criando o Projeto\n\nAcesse [start.spring.io](https://start.spring.io) e selecione suas dependências."
+}
+
+###
+
+### PASSO 4: Adicionar tópico 3 — Primeiro endpoint
+POST {{baseUrl}}/api/blog/posts/guia-completo-de-spring-boot/topics
+Content-Type: application/json
+
+{
+  "title": "Criando o Primeiro Endpoint",
+  "content": "## Hello World REST\n\n```java\n@RestController\npublic class HelloController {\n\n    @GetMapping(\"/hello\")\n    public String hello() {\n        return \"Hello, Spring Boot!\";\n    }\n}\n```\n\nRode com `mvn spring-boot:run` e acesse `http://localhost:8080/hello`."
+}
+
+###
+
+### PASSO 5: Verificar post completo com os 3 tópicos
+GET {{baseUrl}}/api/blog/posts/guia-completo-de-spring-boot
+
+###
+
+### PASSO 6: Listar só os tópicos
+GET {{baseUrl}}/api/blog/posts/guia-completo-de-spring-boot/topics

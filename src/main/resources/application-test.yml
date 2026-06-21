@@ -1,0 +1,25 @@
+spring:
+  datasource:
+    url: jdbc:tc:postgresql:15:///testdb
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+  
+  flyway:
+    enabled: true
+    clean-disabled: false
+
+aws:
+  s3:
+    bucket-name: test-bucket
+    region: us-east-1
+  credentials:
+    access-key: test
+    secret-key: test
+
+jwt:
+  secret: test-secret-key-for-testing-only
+  expiration: 3600000
+
+logging:
+  level:
+    root: WARN
+    com.otavio.blog: DEBUG

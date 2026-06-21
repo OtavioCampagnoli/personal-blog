@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  h2:
+    console:
+      enabled: false
+  flyway:
+    enabled: true
+    clean-disabled: false
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+aws:
+  s3:
+    bucket-name: test-bucket
+    region: us-east-1
+    cloudfront-domain: localhost
+
+jwt:
+  secret: test-secret-key-for-testing-only-change-in-production
+  expiration: 3600000
+
+logging:
+  level:
+    root: WARN
+    com.otavio.blog: INFO

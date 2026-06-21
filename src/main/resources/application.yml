@@ -1,0 +1,75 @@
+spring:
+  application:
+    name: personal-blog
+  
+  datasource:
+    url: jdbc:h2:mem:blogdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
+  
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+  
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    time-zone: UTC
+    default-property-inclusion: non_null
+  
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
+
+# AWS Configuration
+aws:
+  s3:
+    bucket-name: ${AWS_S3_BUCKET:otavio-blog-images}
+    region: ${AWS_REGION:us-east-1}
+    cloudfront-domain: ${AWS_CLOUDFRONT_DOMAIN:}
+  credentials:
+    access-key: ${AWS_ACCESS_KEY:}
+    secret-key: ${AWS_SECRET_KEY:}
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET:my-super-secret-key-change-in-production-use-env-var}
+  expiration: ${JWT_EXPIRATION:86400000} # 24 hours in milliseconds
+
+# Application Configuration
+blog:
+  max-topics-per-post: 50
+  max-images-per-topic: 20
+  supported-languages:
+    - en-US
+    - pt-BR
+    - es-ES
+  default-language: en-US
+
+# Logging
+logging:
+  level:
+    root: INFO
+    com.otavio.blog: DEBUG
+    org.springframework.jdbc: DEBUG
+    org.springframework.web: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Server
+server:
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
+  compression:
+    enabled: true

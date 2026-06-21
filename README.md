@@ -1,2 +1,3 @@
-# personal-blog
-Personal blog api create to publish my notes using Java
+# Personal Blog
+
+Documentation is centralized in [docs/README.md](docs/README.md).

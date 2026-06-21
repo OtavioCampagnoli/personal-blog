@@ -1,0 +1,96 @@
+### Base URL
+@baseUrl = http://localhost:8080
+@defaultCategoryId = 11111111-1111-1111-1111-111111111111
+
+### ─────────────────────────────────────────
+### Task 01: Create Post Draft
+### ─────────────────────────────────────────
+
+POST {{baseUrl}}/api/blog/posts
+Content-Type: application/json
+
+{
+  "title": "Meu Primeiro Post sobre Java",
+  "description": "Aprenda os fundamentos do Java moderno com Spring Boot",
+  "categoryId": "{{defaultCategoryId}}",
+  "tags": ["java", "spring-boot", "backend"]
+}
+
+###
+
+### Create post — sem description e sem tags
+POST {{baseUrl}}/api/blog/posts
+Content-Type: application/json
+
+{
+  "title": "Post Minimo Valido Aqui",
+  "categoryId": "{{defaultCategoryId}}"
+}
+
+###
+
+### Create post — slug duplicado (deve gerar sufixo -2)
+POST {{baseUrl}}/api/blog/posts
+Content-Type: application/json
+
+{
+  "title": "Meu Primeiro Post sobre Java",
+  "categoryId": "{{defaultCategoryId}}"
+}
+
+###
+
+### Create post — ERRO: título muito curto (< 10 chars)
+POST {{baseUrl}}/api/blog/posts
+Content-Type: application/json
+
+{
+  "title": "Java",
+  "categoryId": "{{defaultCategoryId}}"
+}
+
+###
+
+### Create post — ERRO: título ausente
+POST {{baseUrl}}/api/blog/posts
+Content-Type: application/json
+
+{
+  "categoryId": "{{defaultCategoryId}}"
+}
+
+###
+
+### Create post — ERRO: categoria inexistente
+POST {{baseUrl}}/api/blog/posts
+Content-Type: application/json
+
+{
+  "title": "Post com Categoria Invalida",
+  "categoryId": "00000000-0000-0000-0000-000000000000"
+}
+
+###
+
+### Create post — ERRO: mais de 10 tags
+POST {{baseUrl}}/api/blog/posts
+Content-Type: application/json
+
+{
+  "title": "Post com Tags Demais Aqui",
+  "categoryId": "{{defaultCategoryId}}",
+  "tags": ["t1","t2","t3","t4","t5","t6","t7","t8","t9","t10","t11"]
+}
+
+###
+
+### ─────────────────────────────────────────
+### Task 02: Get Post by Slug
+### ─────────────────────────────────────────
+
+GET {{baseUrl}}/api/blog/posts/meu-primeiro-post-sobre-java
+
+###
+
+### Get post — ERRO: slug inexistente
+GET {{baseUrl}}/api/blog/posts/esse-post-nao-existe

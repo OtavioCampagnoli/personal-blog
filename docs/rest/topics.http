@@ -1,0 +1,77 @@
+### Base URL
+@baseUrl = http://localhost:8080
+@postSlug = meu-primeiro-post-sobre-java
+
+### ─────────────────────────────────────────
+### Task 03: Add Topic to Post
+### ─────────────────────────────────────────
+
+### Adicionar tópico ao final (sem especificar order)
+POST {{baseUrl}}/api/blog/posts/{{postSlug}}/topics
+Content-Type: application/json
+
+{
+  "title": "Introdução ao Spring Boot",
+  "content": "## O que é Spring Boot?\n\nSpring Boot é um framework que facilita a criação de aplicações Java com configuração mínima. Neste tópico vamos explorar seus principais conceitos."
+}
+
+###
+
+### Adicionar segundo tópico ao final
+POST {{baseUrl}}/api/blog/posts/{{postSlug}}/topics
+Content-Type: application/json
+
+{
+  "title": "Configurando o Projeto",
+  "content": "## Setup Inicial\n\nPara criar um projeto Spring Boot você pode usar o Spring Initializr:\n\n```bash\ncurl https://start.spring.io/starter.zip \\\n  -d type=maven-project \\\n  -d language=java \\\n  -d bootVersion=3.2.5 \\\n  -o projeto.zip\n```"
+}
+
+###
+
+### Adicionar tópico em posição específica (order: 1 — empurra os outros)
+POST {{baseUrl}}/api/blog/posts/{{postSlug}}/topics
+Content-Type: application/json
+
+{
+  "title": "Pré-requisitos",
+  "content": "## O que você precisa ter instalado\n\n- Java 21+\n- Maven 3.8+\n- Uma boa IDE (IntelliJ, VSCode)",
+  "order": 1
+}
+
+###
+
+### Listar tópicos do post (ordenados)
+GET {{baseUrl}}/api/blog/posts/{{postSlug}}/topics
+
+###
+
+### ERRO: título muito curto (< 3 chars)
+POST {{baseUrl}}/api/blog/posts/{{postSlug}}/topics
+Content-Type: application/json
+
+{
+  "title": "AB",
+  "content": "Conteudo aqui com texto suficiente para passar na validacao"
+}
+
+###
+
+### ERRO: conteúdo muito curto (< 10 chars)
+POST {{baseUrl}}/api/blog/posts/{{postSlug}}/topics
+Content-Type: application/json
+
+{
+  "title": "Título Válido Aqui",
+  "content": "Curto"
+}
+
+###
+
+### ERRO: post inexistente
+POST {{baseUrl}}/api/blog/posts/post-que-nao-existe/topics
+Content-Type: application/json
+
+{
+  "title": "Tópico em Post Inexistente",
+  "content": "Este post não existe no sistema, deve retornar 404"
+}

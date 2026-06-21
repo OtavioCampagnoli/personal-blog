@@ -1,0 +1,82 @@
+### Base URL
+@baseUrl = http://localhost:8080
+
+### ─────────────────────────────────────────
+### Task 04: Upload Image
+### ─────────────────────────────────────────
+
+### Upload JPEG — copie um arquivo .jpg antes de rodar
+# @name uploadImage
+POST {{baseUrl}}/api/blog/images
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="test.jpg"
+Content-Type: image/jpeg
+
+< ./test.jpg
+--boundary
+Content-Disposition: form-data; name="altText"
+
+Diagrama mostrando arquitetura do sistema
+--boundary--
+
+###
+
+### ERRO: tipo não suportado (PDF)
+POST {{baseUrl}}/api/blog/images
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="doc.pdf"
+Content-Type: application/pdf
+
+< ./test.pdf
+--boundary--
+
+###
+
+### ─────────────────────────────────────────
+### Task 05: Associate Image to Topic
+### ─────────────────────────────────────────
+
+### Associar imagem (substitua os IDs abaixo)
+# @postSlug = meu-primeiro-post-sobre-java
+# @topicId  = <id do tópico>
+# @imageId  = <id da imagem>
+
+POST {{baseUrl}}/api/blog/posts/{{postSlug}}/topics/{{topicId}}/images
+Content-Type: application/json
+
+{
+  "imageId": "{{imageId}}",
+  "caption": "Diagrama mostrando a arquitetura do Spring Boot"
+}
+
+###
+
+### Associar com posição específica
+POST {{baseUrl}}/api/blog/posts/{{postSlug}}/topics/{{topicId}}/images
+Content-Type: application/json
+
+{
+  "imageId": "{{imageId}}",
+  "position": 1,
+  "caption": "Primeira imagem do tópico"
+}
+
+###
+
+### ERRO: imageId inválido
+POST {{baseUrl}}/api/blog/posts/{{postSlug}}/topics/{{topicId}}/images
+Content-Type: application/json
+
+{
+  "imageId": "00000000-0000-0000-0000-000000000099",
+  "caption": "Imagem inexistente"
+}
+
+###
+
+### Listar imagens do tópico
+GET {{baseUrl}}/api/blog/posts/{{postSlug}}/topics/{{topicId}}/images
